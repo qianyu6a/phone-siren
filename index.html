@@ -66,7 +66,7 @@
   .g5{grid-template-columns:repeat(5,minmax(0,1fr))}
 
   button.btn{
-    touch-action:none;user-select:none;-webkit-user-select:none;cursor:pointer;
+    touch-action:none;user-select:none;-webkit-user-select:none;-webkit-touch-callout:none;cursor:pointer;
     min-width:0;min-height:47px;padding:6px 3px;
     border:1px solid #313a46;border-radius:6px;
     background:linear-gradient(#1e2530,#131820);
@@ -295,17 +295,15 @@
         if (Math.floor(t / 8) % 2 === 0) { on[2] = on[5] = true; }
         break;
       }
-      case 'auto': { // 随动
-        if (activeSiren || manualAutoStrobe) {
-          if (Math.floor(t / 4) % 2 === 0) { on[0] = on[1] = on[2] = true; on[6] = true; }
-          else { on[6] = on[7] = on[8] = true; on[2] = true; }
-        }
+      case 'auto': { // 自动联动：常态巡逻闪烁；播放警笛时节奏加快，呼应"随动"
+        const rate = activeSiren ? 4 : 7;
+        if (Math.floor(t / rate) % 2 === 0) { on[0] = on[1] = on[2] = true; on[6] = true; }
+        else { on[6] = on[7] = on[8] = true; on[2] = true; }
         break;
       }
     }
     return on;
   }
-  let manualAutoStrobe = false;
 
   function lightStep() {
     lightTick++;
@@ -386,7 +384,6 @@
     g.connect(filterNode);
 
     const v = { osc: [osc], lfo: null, gain: g, timer: null };
-    let started = false;
 
     if (o.sweep) {
       const lfo = ctx.createOscillator();
@@ -400,7 +397,6 @@
       v.lfo = lfo;
     }
     osc.start();
-    started = true;
     g.gain.setTargetAtTime(o.level == null ? 0.5 : o.level, ctx.currentTime, 0.02);
     voices.push(v);
     return v;
@@ -430,6 +426,9 @@
     clearTimers();
     clearVoices(release);
     activeSiren = null;
+    holdKind = null;
+    holdVoices = [];
+    $$('[data-hold]').forEach(b => b.classList.remove('on'));
     refreshSirenButtons();
   }
 
@@ -605,8 +604,15 @@
       toast('未获得麦克风权限');
     }
   }
-  function stopBroadcast() {
+  function stopBroadcast(playback) {
     if (broadcastRec && broadcastRec.state === 'recording') {
+      if (playback === false) {
+        // 静音/切后台：丢弃录音、不回放
+        broadcastRec.onstop = () => {
+          if (micStream) { micStream.getTracks().forEach(t => t.stop()); micStream = null; }
+          setState('待命');
+        };
+      }
       try { broadcastRec.stop(); } catch (e) {}
     } else {
       if (micStream) { micStream.getTracks().forEach(t => t.stop()); micStream = null; }
@@ -620,13 +626,14 @@
     if (on) {
       if (bassNode) return;
       const osc = ctx.createOscillator(); osc.type = 'sine'; osc.frequency.value = 52;
-      const g = ctx.createGain(); g.gain.value = 0;
+      const g = ctx.createGain();
       const lfo = ctx.createOscillator(); lfo.type = 'square'; lfo.frequency.value = 2.4;
       const lg = ctx.createGain(); lg.gain.value = 0.5;
       lfo.connect(lg); lg.connect(g.gain);
       osc.connect(g); g.connect(filterNode);
       osc.start(); lfo.start();
-      g.gain.setTargetAtTime(0.001, ctx.currentTime, 0.05);
+      // 基准偏置 0.5 + LFO ±0.5 → 增益在 [0, 1] 之间脉冲，避免负增益(相位反转)导致"听不断的低音"
+      g.gain.setTargetAtTime(0.5, ctx.currentTime, 0.05);
       bassNode = { osc, lfo, gain: g };
       setState('重低音脉冲 · 开启');
     } else {
@@ -715,12 +722,12 @@
   $$('[data-action="mute"]').forEach(btn => {
     btn.addEventListener('click', e => {
       e.preventDefault();
+      if (holdKind === 'broadcast') stopBroadcast(false);
       stopAll(0.08);
       toggleBass(false);
       $$('[data-toggle="bass"]').forEach(b => b.classList.remove('on'));
       setLight('off');
       $$('[data-light]').forEach(b => b.classList.remove('on'));
-      endHold();
       setState('已静音');
       toast('已全部停止');
     });
@@ -743,11 +750,16 @@
     $('#volV').textContent = e.target.value + '%';
     applyGain();
   });
-  $('#pitch').addEventListener('input', e => {
+  $('#pitch').addEventListener('input', e => { $('#pitchV').textContent = e.target.value; });
+  $('#pitch').addEventListener('change', e => {
     settings.pitch = +e.target.value;
-    $('#pitchV').textContent = e.target.value;
+    if (!activeSiren) return;
     // 音调变化对正在播放的警笛生效：重启当前音色
-    if (activeSiren) { const cur = activeSiren; stopAll(0.08); buildSiren(cur); activeSiren = cur; refreshSirenButtons(); }
+    const cur = activeSiren;
+    stopAll(0.08);
+    buildSiren(cur);
+    activeSiren = cur;
+    refreshSirenButtons();
   });
 
   // 免责弹窗
@@ -766,7 +778,12 @@
 
   // 页面隐藏时停掉所有声音，避免后台空响
   document.addEventListener('visibilitychange', () => {
-    if (document.hidden) { if (activeSiren) stopAll(0.1); setState('待命'); }
+    if (!document.hidden) return;
+    if (holdKind === 'broadcast') stopBroadcast(false);
+    stopAll(0.1);
+    toggleBass(false);
+    $$('[data-toggle="bass"]').forEach(b => b.classList.remove('on'));
+    setState('待命');
   });
 
   // 移动端保险：首次真实触摸即解锁音频上下文（iOS/Android 自动播放策略）

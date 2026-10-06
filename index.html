@@ -175,20 +175,20 @@
     </section>
 
     <section>
-      <h2>巡航警报</h2>
+      <h2>巡航警报 · 调频</h2>
       <div class="grid g3">
-        <button class="btn blue" data-siren="wail">巡航 Wail<small>标准</small></button>
-        <button class="btn blue" data-siren="wail_slow">慢速 Wail<small>慢速</small></button>
-        <button class="btn blue" data-siren="wail_fast">快速 Wail<small>快速</small></button>
+        <button class="btn blue" data-siren="wail">连续调频<small>消防 600-1500Hz</small></button>
+        <button class="btn blue" data-siren="wail_slow">连续调频 · 慢<small>消防长鸣</small></button>
+        <button class="btn blue" data-siren="wail_fast">紧急调频<small>警车 快速扫频</small></button>
       </div>
     </section>
 
     <section>
-      <h2>急促警报</h2>
+      <h2>双音警报</h2>
       <div class="grid g3">
-        <button class="btn blue" data-siren="yelp">急促 Yelp<small>急促</small></button>
-        <button class="btn blue" data-siren="piercer">逐击变调<small>逐击</small></button>
-        <button class="btn blue" data-siren="hyper">极速穿透<small>极速</small></button>
+        <button class="btn blue" data-siren="yelp">快速双音调<small>800/1000 · 4Hz</small></button>
+        <button class="btn blue" data-siren="piercer">逐击变调<small>特种</small></button>
+        <button class="btn blue" data-siren="hyper">极速调频<small>600-1500 · 极快</small></button>
       </div>
     </section>
 
@@ -196,16 +196,16 @@
       <h2>特种与轮换</h2>
       <div class="grid g3">
         <button class="btn blue" data-siren="warble">战术颤音<small>高频颤音</small></button>
-        <button class="btn blue" data-siren="hilo">救护 Hi-Lo<small>救护双音</small></button>
-        <button class="btn blue" data-siren="auto">自动<small>随机轮换</small></button>
+        <button class="btn blue" data-siren="hilo">双音转换调<small>警车 110 · 800/1000</small></button>
+        <button class="btn blue" data-siren="auto">自动轮换<small>依次切换</small></button>
       </div>
     </section>
 
     <section>
       <h2>双音并发</h2>
       <div class="grid g2">
-        <button class="btn purple" data-siren="comboA">并发 A<small>巡航 + 急促</small></button>
-        <button class="btn purple" data-siren="comboB">并发 B<small>急促 + 颤音</small></button>
+        <button class="btn purple" data-siren="comboA">并发 A<small>警车双音 + 消防</small></button>
+        <button class="btn purple" data-siren="comboB">并发 B<small>紧急调频 + 快双音</small></button>
       </div>
     </section>
 
@@ -371,33 +371,86 @@
     if (masterNode) masterNode.gain.setTargetAtTime(targetGain(), ctx.currentTime, 0.04);
   }
 
-  // 一个发声单元：振荡器(+LFO调制) → 增益 → 滤波
+  // 饱和曲线（模拟大功率喇叭的轻微失真）
+  function makeSatCurve(amount) {
+    const n = 1024, curve = new Float32Array(n);
+    for (let i = 0; i < n; i++) {
+      const x = (i * 2) / n - 1;
+      curve[i] = Math.tanh(x * amount);
+    }
+    return curve;
+  }
+
+  // 一个发声单元 —— 真实警笛 = 电子音源 + 号角喇叭，不是纯电子蜂鸣：
+  //   谐波源(sawtooth) → 高通去隆隆 → 号筒共振峰(peaking) → 频响上限(lowpass)
+  //   → 功率饱和(waveshaper) → 增益
   function makeVoice(o) {
     ensureCtx();
+    const P = pitchFactor();
+    const mid = o.mid || 800;
+
+    // 电子警报器本质是方波驱动号角喇叭
     const osc = ctx.createOscillator();
-    osc.type = o.type || 'sawtooth';
-    osc.frequency.value = (o.mid || 800) * pitchFactor();
+    osc.type = o.type || 'square';
+    osc.frequency.value = mid * P;
+
+    const hp = ctx.createBiquadFilter();
+    hp.type = 'highpass';
+    hp.frequency.value = (o.floor == null ? 150 : o.floor) * P;
+    hp.Q.value = 0.7;
+
+    // 号筒共振峰：警报器「厚实、穿透」的中频优势
+    const horn = ctx.createBiquadFilter();
+    horn.type = 'peaking';
+    horn.frequency.value = (o.formant == null ? Math.min(mid * 1.9, 1900) : o.formant) * P;
+    horn.Q.value = o.formantQ == null ? 1.15 : o.formantQ;
+    horn.gain.value = o.formantGain == null ? 10 : o.formantGain;
+
+    // 低通：模拟喇叭频响上限
+    const lp = ctx.createBiquadFilter();
+    lp.type = 'lowpass';
+    lp.frequency.value = (o.tone == null ? Math.min(mid * 3.2, 3400) : o.tone) * P;
+    lp.Q.value = 0.8;
+
+    // 大功率喇叭的饱和质感（110-115dB 车外喇叭会明显失真）
+    const sat = ctx.createWaveShaper();
+    sat.curve = makeSatCurve(o.sat == null ? 2.6 : o.sat);
+    sat.oversample = '2x';
 
     const g = ctx.createGain();
     g.gain.value = 0;
-    osc.connect(g);
+
+    osc.connect(hp); hp.connect(horn); horn.connect(lp); lp.connect(sat); sat.connect(g);
     g.connect(filterNode);
 
-    const v = { osc: [osc], lfo: null, gain: g, timer: null };
+    const v = { osc: [osc], lfo: null, gain: g, timer: null, lp: lp, horn: horn };
 
     if (o.sweep) {
+      // 正弦 LFO：真实警笛的扫频是平滑往复（近似正弦），不是线性三角
       const lfo = ctx.createOscillator();
-      lfo.type = o.wave || 'triangle';
+      lfo.type = 'sine';
       lfo.frequency.value = 1 / (o.period || 3);
       const lg = ctx.createGain();
-      lg.gain.value = o.sweep * pitchFactor();
+      lg.gain.value = o.sweep * P;
       lfo.connect(lg);
       lg.connect(osc.frequency);
+
+      // 亮度联动：音调升高时滤波器同步开大 → 声音"亮"起来（真实喇叭的声学特性）
+      const bg = ctx.createGain();
+      bg.gain.value = (o.bright == null ? Math.min(mid * 1.05, 900) : o.bright) * P;
+      lfo.connect(bg);
+      bg.connect(lp.frequency);
+      bg.connect(horn.frequency);
+
       lfo.start();
       v.lfo = lfo;
     }
     osc.start();
-    g.gain.setTargetAtTime(o.level == null ? 0.5 : o.level, ctx.currentTime, 0.02);
+    // 起音包络：起转更自然，不像开关一样硬起
+    const lvl = o.level == null ? 0.5 : o.level;
+    const now = ctx.currentTime;
+    g.gain.setValueAtTime(0.0001, now);
+    g.gain.linearRampToValueAtTime(lvl, now + (o.attack || 0.06));
     voices.push(v);
     return v;
   }
@@ -432,59 +485,66 @@
     refreshSirenButtons();
   }
 
-  /* ── 各警笛音色 ── */
+  /* ── 各警笛音色（按 GB 车用电子警报器 国标音调表） ── */
+  // 双音工具：两音交替（国标「双音转换调」的机制）
+  function dualTone(loF, hiF, halfMs, lvl, xfade) {
+    const P = pitchFactor();
+    const v = makeVoice({ mid: loF, level: lvl });
+    let hi = false;
+    v.timer = setInterval(() => {
+      hi = !hi;
+      v.osc[0].frequency.setTargetAtTime((hi ? hiF : loF) * P, ctx.currentTime,
+        xfade == null ? 0.018 : xfade);
+    }, halfMs);
+    timers.push(v.timer);
+    return v;
+  }
+
   function buildSiren(name) {
     const P = pitchFactor();
     switch (name) {
-      case 'wail':
-        makeVoice({ mid: 1000, sweep: 430, period: 3.0, level: 0.55 });
+      case 'wail':        // 连续调频调（消防）：600↔1500Hz，周期 4s
+        makeVoice({ mid: 1050, sweep: 450, period: 4.0, level: 0.62 });
         break;
-      case 'wail_slow':
-        makeVoice({ mid: 960, sweep: 400, period: 4.7, level: 0.55 });
+      case 'wail_slow':   // 连续调频 · 慢（消防长鸣）
+        makeVoice({ mid: 1050, sweep: 450, period: 5.6, level: 0.62 });
         break;
-      case 'wail_fast':
-        makeVoice({ mid: 1040, sweep: 470, period: 1.6, level: 0.53 });
+      case 'wail_fast':   // 紧急调频调（警车）：600↔1500Hz，约 2.8Hz
+        makeVoice({ mid: 1050, sweep: 450, period: 0.36, level: 0.6 });
         break;
-      case 'yelp':
-        makeVoice({ mid: 1080, sweep: 520, period: 0.34, level: 0.5 });
+      case 'yelp':        // 快速双音调（交通监理）：800/1000Hz，4Hz
+        dualTone(800, 1000, 125, 0.58);
         break;
-      case 'warble':
-        makeVoice({ mid: 1150, sweep: 220, period: 0.075, wave: 'square', level: 0.42 });
+      case 'hilo':        // 双音转换调（警车 110）：800/1000Hz，2Hz
+        dualTone(800, 1000, 250, 0.62);
         break;
-      case 'hyper':
-        makeVoice({ mid: 1420, sweep: 700, period: 0.13, level: 0.44 });
+      case 'warble':      // 战术颤音
+        makeVoice({ mid: 1050, sweep: 260, period: 0.085, level: 0.45, formant: 1800, tone: 3000 });
         break;
-      case 'hilo': {
-        const v = makeVoice({ type: 'square', mid: 660, level: 0.4 });
-        let hi = false;
-        v.timer = setInterval(() => {
-          hi = !hi;
-          v.osc[0].frequency.setTargetAtTime((hi ? 900 : 660) * P, ctx.currentTime, 0.05);
-        }, 460);
-        timers.push(v.timer);
+      case 'hyper':       // 极速调频
+        makeVoice({ mid: 1050, sweep: 450, period: 0.16, level: 0.5 });
         break;
-      }
-      case 'piercer': {
-        const v = makeVoice({ type: 'triangle', mid: 800, level: 0.46 });
-        const seq = [760, 1040, 1360, 1040, 700, 1120];
+      case 'piercer': {   // 逐击变调（特种）
+        const v = makeVoice({ type: 'triangle', mid: 900, level: 0.5, formant: 1600, tone: 2900 });
+        const seq = [780, 1050, 1350, 1050, 720, 1130];
         let i = 0;
         v.timer = setInterval(() => {
           i = (i + 1) % seq.length;
-          v.osc[0].frequency.setTargetAtTime(seq[i] * P, ctx.currentTime, 0.03);
-        }, 235);
+          v.osc[0].frequency.setTargetAtTime(seq[i] * P, ctx.currentTime, 0.035);
+        }, 220);
         timers.push(v.timer);
         break;
       }
-      case 'comboA':
-        makeVoice({ mid: 1000, sweep: 430, period: 3.0, level: 0.34 });
-        makeVoice({ mid: 1080, sweep: 520, period: 0.34, level: 0.3 });
+      case 'comboA':      // 并发：警车双音 + 连续调频
+        dualTone(800, 1000, 250, 0.4);
+        makeVoice({ mid: 1050, sweep: 450, period: 4.0, level: 0.3 });
         break;
-      case 'comboB':
-        makeVoice({ mid: 1080, sweep: 520, period: 0.34, level: 0.32 });
-        makeVoice({ mid: 1150, sweep: 220, period: 0.075, wave: 'square', level: 0.26 });
+      case 'comboB':      // 并发：紧急调频 + 快速双音
+        makeVoice({ mid: 1050, sweep: 450, period: 0.36, level: 0.34 });
+        dualTone(800, 1000, 125, 0.28);
         break;
       case 'auto': {
-        const cycle = ['wail', 'yelp', 'hilo', 'warble', 'piercer'];
+        const cycle = ['hilo', 'wail', 'yelp', 'wail_fast', 'warble'];
         let i = 0;
         buildSiren(cycle[0]);
         const t = setInterval(() => {
@@ -499,9 +559,9 @@
   }
 
   const SIREN_LABEL = {
-    wail: '巡航 Wail', wail_slow: '慢速 Wail', wail_fast: '快速 Wail',
-    yelp: '急促 Yelp', piercer: '逐击变调', hyper: '极速穿透',
-    warble: '战术颤音', hilo: '救护 Hi-Lo', auto: '自动轮换',
+    wail: '连续调频（消防）', wail_slow: '连续调频 · 慢', wail_fast: '紧急调频（警车）',
+    yelp: '快速双音调', piercer: '逐击变调', hyper: '极速调频',
+    warble: '战术颤音', hilo: '双音转换调（警车 110）', auto: '自动轮换',
     comboA: '并发 A', comboB: '并发 B'
   };
 

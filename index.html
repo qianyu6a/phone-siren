@@ -1,0 +1,798 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover, maximum-scale=1, user-scalable=no">
+<meta name="theme-color" content="#05070a">
+<meta name="format-detection" content="telephone=no">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<title>手机警报器</title>
+<style>
+  :root{
+    color-scheme: dark;
+    --bg:#05070a;
+    --card:#0d1117;
+    --line:#242b33;
+    --txt:#e6eef8;
+    --dim:#7e8b9a;
+    --accent:#d98220;
+    font-family: system-ui,-apple-system,"PingFang SC","Microsoft YaHei",sans-serif;
+  }
+  *{box-sizing:border-box;-webkit-tap-highlight-color:transparent}
+  html,body{margin:0;padding:0}
+  body{
+    min-height:100dvh;
+    background:radial-gradient(ellipse 120% 60% at 50% 0,#161f29 0,#05070a 60%);
+    color:var(--txt);
+    padding:10px 9px calc(14px + env(safe-area-inset-bottom));
+    display:flex;
+    justify-content:center;
+  }
+  .app{
+    width:100%;max-width:430px;
+    border:1px solid #2c3440;border-radius:14px;overflow:hidden;
+    background:var(--card);
+    box-shadow:0 18px 50px #000b, inset 0 1px #ffffff0a;
+  }
+
+  /* ── 顶部警灯条 ── */
+  .lamps{display:grid;grid-template-columns:repeat(9,1fr);gap:3px;padding:7px 8px;background:#04060a;border-bottom:1px solid #1b222b}
+  .lamp{height:9px;border-radius:2px;background:#151b23;box-shadow:inset 0 0 0 1px #222a34;transition:background .06s,box-shadow .06s}
+  .lamp[data-c="blue"].on{background:#1a7cff;box-shadow:0 0 11px 3px #1a7cff,inset 0 0 5px #bcdcff}
+  .lamp[data-c="red"].on{background:#ff2233;box-shadow:0 0 11px 3px #ff2233,inset 0 0 5px #ffc2c7}
+  .lamp[data-c="amber"].on{background:#ff9b1e;box-shadow:0 0 11px 3px #ff9b1e,inset 0 0 5px #ffe1b0}
+  .lamp[data-c="white"].on{background:#ffffff;box-shadow:0 0 12px 3px #ffffff,inset 0 0 5px #fff}
+
+  header{height:40px;display:flex;align-items:center;justify-content:center;
+    background:linear-gradient(#232a34,#141a22);
+    font-weight:800;letter-spacing:.22em;font-size:15px;text-shadow:0 1px 3px #000;border-bottom:1px solid #1b222b}
+
+  .status{display:flex;align-items:center;gap:6px;padding:9px 12px 5px;font-size:11px;color:#8b98a8;letter-spacing:.08em}
+  .status .dot{width:6px;height:6px;border-radius:50%;background:#22c55e;box-shadow:0 0 7px #22c55e;flex:none}
+  .status strong{margin-left:auto;color:#cfdcec;font-weight:600;letter-spacing:0;font-size:11px}
+
+  main{padding:0 9px 11px}
+  section{margin-top:10px}
+  h2{
+    margin:0 0 6px;padding-left:8px;border-left:3px solid var(--accent);
+    font-size:11px;font-weight:600;color:#8d9aa9;letter-spacing:.14em;
+  }
+  .grid{display:grid;gap:5px}
+  .g2{grid-template-columns:repeat(2,minmax(0,1fr))}
+  .g3{grid-template-columns:repeat(3,minmax(0,1fr))}
+  .g4{grid-template-columns:repeat(4,minmax(0,1fr))}
+  .g5{grid-template-columns:repeat(5,minmax(0,1fr))}
+
+  button.btn{
+    touch-action:none;user-select:none;-webkit-user-select:none;cursor:pointer;
+    min-width:0;min-height:47px;padding:6px 3px;
+    border:1px solid #313a46;border-radius:6px;
+    background:linear-gradient(#1e2530,#131820);
+    box-shadow:inset 0 1px #ffffff12,0 2px 3px #0007;
+    color:#cfdceb;font:700 12px/1.15 inherit;
+    display:flex;flex-direction:column;align-items:center;justify-content:center;gap:4px;
+    transition:transform .05s,border-color .12s,box-shadow .12s,background .12s;
+  }
+  button.btn small{font-size:8px;font-weight:500;opacity:.6;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:100%}
+  button.btn:active{transform:translateY(1px)}
+  .g5 .btn{min-height:44px;font-size:10px}
+  .g4 .btn{min-height:45px;font-size:10.5px}
+  .g5 .btn small,.g4 .btn small{font-size:7.5px}
+
+  .btn.red{color:#ff97a3;background:linear-gradient(#3a161c,#20101a);border-color:#5a2f38}
+  .btn.green{color:#7cf0a5;background:linear-gradient(#16332a,#11241c);border-color:#27533b}
+  .btn.amber{color:#ffd48c;background:linear-gradient(#33240f,#1e1710);border-color:#584128}
+  .btn.orange{color:#ffd9a3;background:linear-gradient(#3a2712,#231a10);border-color:#5f4426}
+  .btn.purple{color:#dcb2ff;background:linear-gradient(#281b3a,#181322);border-color:#453361}
+  .btn.blue{color:#9fd0ff;background:linear-gradient(#14243a,#101722);border-color:#2a3d59}
+
+  .btn.on{color:#fff;border-color:currentColor}
+  .btn.red.on{background:linear-gradient(#c31c31,#6b1320);border-color:#ff4a63;color:#fff;box-shadow:0 0 13px #e51638aa}
+  .btn.green.on{background:linear-gradient(#05904d,#05452b);border-color:#2cec8b;color:#fff;box-shadow:0 0 13px #15d478aa}
+  .btn.amber.on{background:linear-gradient(#e79a1a,#8a4a08);border-color:#ffd474;color:#150e04;box-shadow:0 0 13px #ffa52299}
+  .btn.orange.on{background:linear-gradient(#e79a1a,#8a4a08);border-color:#ffd474;color:#150e04;box-shadow:0 0 13px #ffa52299}
+  .btn.purple.on{background:linear-gradient(#7a21cc,#410f70);border-color:#b95cff;color:#fff;box-shadow:0 0 13px #9325e4aa}
+  .btn.blue.on{background:linear-gradient(#0a6fb8,#083a63);border-color:#4fc3ff;color:#fff;box-shadow:0 0 13px #2b9fe0aa}
+
+  footer{
+    display:flex;align-items:center;justify-content:space-between;gap:8px;
+    padding:9px 12px;border-top:1px solid #1e252e;font-size:9px;color:#65707d;
+  }
+  footer strong{color:#e76577;font-weight:600}
+
+  /* ── 免责弹窗 ── */
+  .gate{position:fixed;inset:0;z-index:50;background:#000;display:flex;align-items:center;justify-content:center;padding:22px}
+  .gate.hide{display:none}
+  .gate-box{width:100%;max-width:390px;background:#171c23;border:1px solid #2b333e;border-radius:12px;padding:20px 18px;box-shadow:0 18px 50px #000}
+  .gate-box p{margin:0 0 20px;font-size:13.5px;line-height:1.85;color:#d5dfeb}
+  .gate-actions{display:grid;grid-template-columns:1fr 1fr;gap:10px}
+  .gate-actions .btn{min-height:46px;font-size:13.5px}
+  .gate-out{color:#8b98a8;font-size:13px;text-align:center;line-height:1.9}
+
+  /* ── 设置面板 ── */
+  .sheet{position:fixed;inset:0;z-index:40;background:#000a;backdrop-filter:blur(3px);display:none;align-items:flex-end;justify-content:center}
+  .sheet.show{display:flex}
+  .sheet-box{width:100%;max-width:430px;background:#0f141b;border:1px solid #2b333e;border-bottom:0;border-radius:14px 14px 0 0;padding:16px 16px calc(18px + env(safe-area-inset-bottom))}
+  .sheet-box h3{margin:0 0 14px;font-size:13px;letter-spacing:.1em;color:#cfdcec;font-weight:600}
+  .row{display:flex;align-items:center;gap:12px;margin-bottom:15px;font-size:12px;color:#9dabba}
+  .row label{flex:none;width:62px}
+  .row input[type=range]{flex:1;accent-color:var(--accent)}
+  .row .val{flex:none;width:44px;text-align:right;color:#cfdcec;font-variant-numeric:tabular-nums}
+  .sheet-box .btn{width:100%;min-height:44px}
+  .hint{font-size:10px;color:#66707d;line-height:1.7;margin:0 0 14px}
+  .toast{position:fixed;left:50%;bottom:26px;transform:translateX(-50%);z-index:60;
+    background:#1b222b;border:1px solid #303a46;color:#dbe6f2;font-size:12px;
+    padding:9px 16px;border-radius:20px;opacity:0;pointer-events:none;transition:opacity .2s}
+  .toast.show{opacity:1}
+</style>
+</head>
+<body>
+
+<!-- 开场免责声明 -->
+<div class="gate" id="gate">
+  <div class="gate-box" id="gateBox">
+    <p>本软件仅供娱乐与技术学习，严禁在道路、商场、公园、居民区等公共场所播放，严禁用于冒充特种车辆等违法行为，违者后果自负。</p>
+    <div class="gate-actions">
+      <button class="btn green" id="agree">同意并进入</button>
+      <button class="btn red" id="reject">拒绝并退出</button>
+    </div>
+  </div>
+</div>
+
+<div class="app">
+  <div class="lamps" id="lamps"></div>
+  <header>手机警报器</header>
+  <div class="status"><span class="dot"></span>系统就绪<strong id="state">待命</strong></div>
+
+  <main>
+    <section>
+      <h2>号角与广播</h2>
+      <div class="grid g2">
+        <button class="btn red" data-hold="horn">气笛号角<small>点接触发</small></button>
+        <button class="btn green" data-hold="broadcast">车外广播<small>按住录音</small></button>
+      </div>
+    </section>
+
+    <section>
+      <h2>战术警灯</h2>
+      <div class="grid g5">
+        <button class="btn orange" data-light="auto">自动联动<small>随动</small></button>
+        <button class="btn" data-light="m1">模式 1<small>示警</small></button>
+        <button class="btn" data-light="m2">模式 2<small>双爆</small></button>
+        <button class="btn" data-light="m3">模式 3<small>六循环</small></button>
+        <button class="btn" data-light="m4">拦停检车<small>前射灯</small></button>
+      </div>
+    </section>
+
+    <section>
+      <h2>手动电笛</h2>
+      <div class="grid g2">
+        <button class="btn amber" data-hold="ehigh">高音电笛<small>长按爬升 / 松开滑落</small></button>
+        <button class="btn amber" data-hold="elow">低音电笛<small>长按爬升 / 飞轮拖尾</small></button>
+      </div>
+    </section>
+
+    <section>
+      <h2>巡航警报</h2>
+      <div class="grid g3">
+        <button class="btn blue" data-siren="wail">巡航 Wail<small>标准</small></button>
+        <button class="btn blue" data-siren="wail_slow">慢速 Wail<small>慢速</small></button>
+        <button class="btn blue" data-siren="wail_fast">快速 Wail<small>快速</small></button>
+      </div>
+    </section>
+
+    <section>
+      <h2>急促警报</h2>
+      <div class="grid g3">
+        <button class="btn blue" data-siren="yelp">急促 Yelp<small>急促</small></button>
+        <button class="btn blue" data-siren="piercer">逐击变调<small>逐击</small></button>
+        <button class="btn blue" data-siren="hyper">极速穿透<small>极速</small></button>
+      </div>
+    </section>
+
+    <section>
+      <h2>特种与轮换</h2>
+      <div class="grid g3">
+        <button class="btn blue" data-siren="warble">战术颤音<small>高频颤音</small></button>
+        <button class="btn blue" data-siren="hilo">救护 Hi-Lo<small>救护双音</small></button>
+        <button class="btn blue" data-siren="auto">自动<small>随机轮换</small></button>
+      </div>
+    </section>
+
+    <section>
+      <h2>双音并发</h2>
+      <div class="grid g2">
+        <button class="btn purple" data-siren="comboA">并发 A<small>巡航 + 急促</small></button>
+        <button class="btn purple" data-siren="comboB">并发 B<small>急促 + 颤音</small></button>
+      </div>
+    </section>
+
+    <section>
+      <h2>系统控制</h2>
+      <div class="grid g4">
+        <button class="btn amber" data-toggle="bass">重低音脉冲<small>点击开启</small></button>
+        <button class="btn" data-panel="settings">系统设置<small>调音设置</small></button>
+        <button class="btn" data-toggle="lowpower">低功率<small>-12dB</small></button>
+        <button class="btn red" data-action="mute">静音<small>一键全停</small></button>
+      </div>
+    </section>
+  </main>
+
+  <footer>
+    <span>v1.0.0</span>
+    <strong>免费软件 · 严禁倒卖</strong>
+    <span id="contact">联系作者</span>
+  </footer>
+</div>
+
+<!-- 调音设置 -->
+<div class="sheet" id="sheet">
+  <div class="sheet-box">
+    <h3>调音设置</h3>
+    <div class="row"><label>主音量</label><input type="range" id="vol" min="0" max="100" value="80"><span class="val" id="volV">80%</span></div>
+    <div class="row"><label>音调</label><input type="range" id="pitch" min="-6" max="6" value="0" step="1"><span class="val" id="pitchV">0</span></div>
+    <p class="hint">音调升高时警笛更尖、穿透力更强；降低时更浑厚低沉。</p>
+    <button class="btn" id="closeSheet">关闭</button>
+  </div>
+</div>
+
+<div class="toast" id="toast"></div>
+
+<script>
+(() => {
+  'use strict';
+  window.__appV = '1.0.0';
+  window.__errors = [];
+  addEventListener('error', e => window.__errors.push(String(e.message || e)));
+  addEventListener('unhandledrejection', e => window.__errors.push(String(e.reason)));
+
+  const $ = s => document.querySelector(s);
+  const $$ = s => Array.from(document.querySelectorAll(s));
+
+  /* ══════════ 1. 警灯条 ══════════ */
+  const LAMP_COLORS = ['blue','blue','amber','white','white','amber','red','red','red'];
+  const lamps = $('#lamps');
+  LAMP_COLORS.forEach(c => {
+    const el = document.createElement('span');
+    el.className = 'lamp';
+    el.dataset.c = c;
+    lamps.appendChild(el);
+  });
+  const lampEls = $$('.lamp');
+
+  let lightMode = 'off';
+  let lightTimer = null;
+  let lightTick = 0;
+
+  function paintLamps(onArr) {
+    for (let i = 0; i < lampEls.length; i++) {
+      lampEls[i].classList.toggle('on', !!(onArr && onArr[i]));
+    }
+  }
+  // 每个 pattern 返回 9 个布尔值的点灯数组
+  function lightPattern(mode, t) {
+    const on = new Array(9).fill(false);
+    switch (mode) {
+      case 'm1': { // 示警：左右交替
+        if (Math.floor(t / 4) % 2 === 0) { on[0] = on[1] = on[2] = on[5] = true; }
+        else { on[3] = on[4] = on[6] = on[7] = on[8] = true; }
+        break;
+      }
+      case 'm2': { // 双爆：快速两闪 + 停顿
+        const p = t % 12;
+        if (p < 1 || (p >= 3 && p < 4) || (p >= 6 && p < 7)) on[6] = on[7] = on[8] = on[0] = on[1] = on[2] = true;
+        break;
+      }
+      case 'm3': { // 六循环：追光
+        const i = Math.floor(t / 2) % 9;
+        on[i] = true; on[(i + 3) % 9] = true; on[(i + 6) % 9] = true;
+        break;
+      }
+      case 'm4': { // 前射灯：白灯常亮 + 琥珀慢闪
+        on[3] = on[4] = true;
+        if (Math.floor(t / 8) % 2 === 0) { on[2] = on[5] = true; }
+        break;
+      }
+      case 'auto': { // 随动
+        if (activeSiren || manualAutoStrobe) {
+          if (Math.floor(t / 4) % 2 === 0) { on[0] = on[1] = on[2] = true; on[6] = true; }
+          else { on[6] = on[7] = on[8] = true; on[2] = true; }
+        }
+        break;
+      }
+    }
+    return on;
+  }
+  let manualAutoStrobe = false;
+
+  function lightStep() {
+    lightTick++;
+    paintLamps(lightPattern(lightMode, lightTick));
+  }
+  function setLight(mode) {
+    lightMode = mode;
+    lightTick = 0;
+    if (lightTimer) { clearInterval(lightTimer); lightTimer = null; }
+    paintLamps(null);
+    if (mode === 'off') return;
+    lightTimer = setInterval(lightStep, 55);
+  }
+
+  /* ══════════ 2. 音频引擎 ══════════ */
+  let ctx = null, filterNode = null, compNode = null, masterNode = null;
+  let voices = [];          // 活跃发声单元
+  let timers = [];          // 活跃定时器（自动轮换等）
+  let activeSiren = null;
+  let holdKind = null;      // 当前长按的类型
+  let holdVoices = [];
+  let bassNode = null;
+  let broadcastRec = null;
+  let micStream = null;
+
+  const settings = { volume: 0.8, pitch: 0, lowPower: false };
+
+  function pitchFactor() { return Math.pow(2, settings.pitch / 12); }
+  function targetGain() { return settings.volume * (settings.lowPower ? 0.25 : 1) * 0.85; }
+
+  function ensureCtx() {
+    if (ctx) {
+      if (ctx.state === 'suspended') ctx.resume().catch(() => {});
+      return ctx;
+    }
+    const AC = window.AudioContext || window.webkitAudioContext;
+    if (!AC) { toast('此浏览器不支持 Web Audio'); throw new Error('no-webaudio'); }
+    ctx = new AC();
+
+    filterNode = ctx.createBiquadFilter();
+    filterNode.type = 'lowpass';
+    filterNode.frequency.value = 4200;
+    filterNode.Q.value = 0.6;
+
+    compNode = ctx.createDynamicsCompressor();
+    compNode.threshold.value = -10;
+    compNode.knee.value = 8;
+    compNode.ratio.value = 3;
+    compNode.attack.value = 0.01;
+    compNode.release.value = 0.2;
+
+    masterNode = ctx.createGain();
+    masterNode.gain.value = targetGain();
+
+    filterNode.connect(compNode);
+    compNode.connect(masterNode);
+    masterNode.connect(ctx.destination);
+
+    ctx.onstatechange = () => {
+      if (ctx.state === 'suspended' && activeSiren) setState('声音已暂停 · 再点一次');
+    };
+    return ctx;
+  }
+  function applyGain() {
+    if (masterNode) masterNode.gain.setTargetAtTime(targetGain(), ctx.currentTime, 0.04);
+  }
+
+  // 一个发声单元：振荡器(+LFO调制) → 增益 → 滤波
+  function makeVoice(o) {
+    ensureCtx();
+    const osc = ctx.createOscillator();
+    osc.type = o.type || 'sawtooth';
+    osc.frequency.value = (o.mid || 800) * pitchFactor();
+
+    const g = ctx.createGain();
+    g.gain.value = 0;
+    osc.connect(g);
+    g.connect(filterNode);
+
+    const v = { osc: [osc], lfo: null, gain: g, timer: null };
+    let started = false;
+
+    if (o.sweep) {
+      const lfo = ctx.createOscillator();
+      lfo.type = o.wave || 'triangle';
+      lfo.frequency.value = 1 / (o.period || 3);
+      const lg = ctx.createGain();
+      lg.gain.value = o.sweep * pitchFactor();
+      lfo.connect(lg);
+      lg.connect(osc.frequency);
+      lfo.start();
+      v.lfo = lfo;
+    }
+    osc.start();
+    started = true;
+    g.gain.setTargetAtTime(o.level == null ? 0.5 : o.level, ctx.currentTime, 0.02);
+    voices.push(v);
+    return v;
+  }
+
+  function killVoice(v, release) {
+    const rel = release == null ? 0.09 : release;
+    const now = ctx.currentTime;
+    try {
+      v.gain.gain.cancelScheduledValues(now);
+      v.gain.gain.setTargetAtTime(0.0001, now, rel / 3);
+    } catch (e) {}
+    const stopAt = now + rel + 0.15;
+    v.osc.forEach(o => { try { o.stop(stopAt); } catch (e) {} });
+    if (v.lfo) { try { v.lfo.stop(stopAt); } catch (e) {} }
+    if (v.timer) clearInterval(v.timer);
+    voices = voices.filter(x => x !== v);
+  }
+  function clearVoices(release) {
+    voices.slice().forEach(v => killVoice(v, release));
+  }
+  function clearTimers() {
+    timers.forEach(t => clearInterval(t));
+    timers = [];
+  }
+  function stopAll(release) {
+    clearTimers();
+    clearVoices(release);
+    activeSiren = null;
+    refreshSirenButtons();
+  }
+
+  /* ── 各警笛音色 ── */
+  function buildSiren(name) {
+    const P = pitchFactor();
+    switch (name) {
+      case 'wail':
+        makeVoice({ mid: 1000, sweep: 430, period: 3.0, level: 0.55 });
+        break;
+      case 'wail_slow':
+        makeVoice({ mid: 960, sweep: 400, period: 4.7, level: 0.55 });
+        break;
+      case 'wail_fast':
+        makeVoice({ mid: 1040, sweep: 470, period: 1.6, level: 0.53 });
+        break;
+      case 'yelp':
+        makeVoice({ mid: 1080, sweep: 520, period: 0.34, level: 0.5 });
+        break;
+      case 'warble':
+        makeVoice({ mid: 1150, sweep: 220, period: 0.075, wave: 'square', level: 0.42 });
+        break;
+      case 'hyper':
+        makeVoice({ mid: 1420, sweep: 700, period: 0.13, level: 0.44 });
+        break;
+      case 'hilo': {
+        const v = makeVoice({ type: 'square', mid: 660, level: 0.4 });
+        let hi = false;
+        v.timer = setInterval(() => {
+          hi = !hi;
+          v.osc[0].frequency.setTargetAtTime((hi ? 900 : 660) * P, ctx.currentTime, 0.05);
+        }, 460);
+        timers.push(v.timer);
+        break;
+      }
+      case 'piercer': {
+        const v = makeVoice({ type: 'triangle', mid: 800, level: 0.46 });
+        const seq = [760, 1040, 1360, 1040, 700, 1120];
+        let i = 0;
+        v.timer = setInterval(() => {
+          i = (i + 1) % seq.length;
+          v.osc[0].frequency.setTargetAtTime(seq[i] * P, ctx.currentTime, 0.03);
+        }, 235);
+        timers.push(v.timer);
+        break;
+      }
+      case 'comboA':
+        makeVoice({ mid: 1000, sweep: 430, period: 3.0, level: 0.34 });
+        makeVoice({ mid: 1080, sweep: 520, period: 0.34, level: 0.3 });
+        break;
+      case 'comboB':
+        makeVoice({ mid: 1080, sweep: 520, period: 0.34, level: 0.32 });
+        makeVoice({ mid: 1150, sweep: 220, period: 0.075, wave: 'square', level: 0.26 });
+        break;
+      case 'auto': {
+        const cycle = ['wail', 'yelp', 'hilo', 'warble', 'piercer'];
+        let i = 0;
+        buildSiren(cycle[0]);
+        const t = setInterval(() => {
+          i = (i + 1) % cycle.length;
+          clearVoices(0.18);
+          buildSiren(cycle[i]);
+        }, 5200);
+        timers.push(t);
+        break;
+      }
+    }
+  }
+
+  const SIREN_LABEL = {
+    wail: '巡航 Wail', wail_slow: '慢速 Wail', wail_fast: '快速 Wail',
+    yelp: '急促 Yelp', piercer: '逐击变调', hyper: '极速穿透',
+    warble: '战术颤音', hilo: '救护 Hi-Lo', auto: '自动轮换',
+    comboA: '并发 A', comboB: '并发 B'
+  };
+
+  function startSiren(name) {
+    ensureCtx();
+    stopAll(0.1);
+    buildSiren(name);
+    activeSiren = name;
+    refreshSirenButtons();
+    if (lightMode === 'off' || lightMode === 'auto') setLight('auto');
+    setState('正在播放 · ' + (SIREN_LABEL[name] || name));
+  }
+  function toggleSiren(name) {
+    if (activeSiren === name) { stopAll(0.12); setState('待命'); }
+    else startSiren(name);
+  }
+  function refreshSirenButtons() {
+    $$('[data-siren]').forEach(b => b.classList.toggle('on', b.dataset.siren === activeSiren));
+  }
+
+  /* ── 长按类：气笛 / 电笛 / 广播 ── */
+  function startHold(kind) {
+    ensureCtx();
+    if (holdKind === kind) return;
+    endHold();
+    holdKind = kind;
+    holdVoices = [];
+
+    if (kind === 'horn') {              // 气笛号角：低音铜管
+      holdVoices.push(makeVoice({ type: 'sawtooth', mid: 295, sweep: 60, period: 2.4, level: 0.4 }));
+      holdVoices.push(makeVoice({ type: 'square', mid: 148, level: 0.16 }));
+      setState('气笛号角');
+    } else if (kind === 'ehigh') {      // 高音电笛：长按爬升
+      const v = makeVoice({ type: 'sawtooth', mid: 430, level: 0.42 });
+      v.osc[0].frequency.setTargetAtTime(880 * pitchFactor(), ctx.currentTime, 0.3);
+      holdVoices.push(v);
+      setState('高音电笛 · 爬升');
+    } else if (kind === 'elow') {       // 低音电笛：长按爬升
+      const v = makeVoice({ type: 'sawtooth', mid: 300, level: 0.44 });
+      v.osc[0].frequency.setTargetAtTime(520 * pitchFactor(), ctx.currentTime, 0.45);
+      holdVoices.push(v);
+      setState('低音电笛 · 爬升');
+    } else if (kind === 'broadcast') {  // 车外广播：按住录音
+      startBroadcast();
+    }
+  }
+  function endHold() {
+    if (!holdKind) return;
+    const kind = holdKind;
+    const vs = holdVoices;
+    holdKind = null;
+    holdVoices = [];
+
+    if (kind === 'ehigh') {
+      vs.forEach(v => { try { v.osc[0].frequency.setTargetAtTime(400 * pitchFactor(), ctx.currentTime, 0.28); } catch (e) {} });
+      setTimeout(() => vs.forEach(v => killVoice(v, 0.35)), 420);
+      setState('待命');
+    } else if (kind === 'elow') {       // 飞轮拖尾
+      vs.forEach(v => { try { v.osc[0].frequency.setTargetAtTime(240 * pitchFactor(), ctx.currentTime, 1.1); } catch (e) {} });
+      setTimeout(() => vs.forEach(v => killVoice(v, 0.6)), 1500);
+      setState('待命');
+    } else if (kind === 'broadcast') {
+      stopBroadcast();
+    } else {
+      vs.forEach(v => killVoice(v, 0.14));
+      setState('待命');
+    }
+  }
+
+  /* ── 车外广播（麦克风录制回放） ── */
+  async function startBroadcast() {
+    if (broadcastRec && broadcastRec.state === 'recording') return;
+    if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
+      toast('此浏览器/环境不支持麦克风'); setState('麦克风不可用'); return;
+    }
+    if (!window.isSecureContext) { toast('需要 https 才能使用麦克风'); setState('需要 https'); return; }
+    try {
+      micStream = await navigator.mediaDevices.getUserMedia({ audio: true });
+      const chunks = [];
+      const mime = (window.MediaRecorder && MediaRecorder.isTypeSupported('audio/webm')) ? 'audio/webm' : '';
+      broadcastRec = mime ? new MediaRecorder(micStream, { mimeType: mime }) : new MediaRecorder(micStream);
+      broadcastRec.ondataavailable = e => { if (e.data && e.data.size) chunks.push(e.data); };
+      broadcastRec.onstop = () => {
+        micStream.getTracks().forEach(t => t.stop());
+        micStream = null;
+        const blob = new Blob(chunks, { type: broadcastRec.mimeType || 'audio/webm' });
+        const url = URL.createObjectURL(blob);
+        const a = new Audio(url);
+        a.volume = Math.min(1, settings.volume * 1.35);
+        setState('车外广播 · 播放中');
+        const cleanup = () => { try { URL.revokeObjectURL(url); } catch (e) {} };
+        a.onended = () => { cleanup(); setState('待命'); };
+        a.onerror = () => { cleanup(); setState('录音回放失败'); };
+        a.play().catch(() => { cleanup(); setState('回放被浏览器拦截'); });
+      };
+      broadcastRec.start();
+      setState('车外广播 · 录音中…');
+    } catch (e) {
+      setState('麦克风被拒绝');
+      toast('未获得麦克风权限');
+    }
+  }
+  function stopBroadcast() {
+    if (broadcastRec && broadcastRec.state === 'recording') {
+      try { broadcastRec.stop(); } catch (e) {}
+    } else {
+      if (micStream) { micStream.getTracks().forEach(t => t.stop()); micStream = null; }
+      setState('待命');
+    }
+  }
+
+  /* ── 重低音脉冲 ── */
+  function toggleBass(on) {
+    ensureCtx();
+    if (on) {
+      if (bassNode) return;
+      const osc = ctx.createOscillator(); osc.type = 'sine'; osc.frequency.value = 52;
+      const g = ctx.createGain(); g.gain.value = 0;
+      const lfo = ctx.createOscillator(); lfo.type = 'square'; lfo.frequency.value = 2.4;
+      const lg = ctx.createGain(); lg.gain.value = 0.5;
+      lfo.connect(lg); lg.connect(g.gain);
+      osc.connect(g); g.connect(filterNode);
+      osc.start(); lfo.start();
+      g.gain.setTargetAtTime(0.001, ctx.currentTime, 0.05);
+      bassNode = { osc, lfo, gain: g };
+      setState('重低音脉冲 · 开启');
+    } else {
+      if (!bassNode) return;
+      const b = bassNode; bassNode = null;
+      const now = ctx.currentTime;
+      b.gain.gain.setTargetAtTime(0.0001, now, 0.05);
+      try { b.osc.stop(now + 0.4); } catch (e) {}
+      try { b.lfo.stop(now + 0.4); } catch (e) {}
+      setState('待命');
+    }
+  }
+
+  /* ══════════ 3. UI 交互 ══════════ */
+  function setState(t) { $('#state').textContent = t; }
+  let toastTimer = null;
+  function toast(msg) {
+    const el = $('#toast');
+    el.textContent = msg;
+    el.classList.add('show');
+    clearTimeout(toastTimer);
+    toastTimer = setTimeout(() => el.classList.remove('show'), 1800);
+  }
+
+  // 长按按钮：pointerdown / up
+  $$('[data-hold]').forEach(btn => {
+    const kind = btn.dataset.hold;
+    const down = e => {
+      e.preventDefault();
+      ensureCtx();
+      btn.classList.add('on');
+      try { btn.setPointerCapture(e.pointerId); } catch (err) {}
+      startHold(kind);
+    };
+    const up = e => {
+      if (!btn.classList.contains('on')) return;
+      e.preventDefault();
+      btn.classList.remove('on');
+      endHold();
+    };
+    btn.addEventListener('pointerdown', down);
+    btn.addEventListener('pointerup', up);
+    btn.addEventListener('pointercancel', up);
+    btn.addEventListener('pointerleave', up);
+    btn.addEventListener('contextmenu', e => e.preventDefault());
+  });
+
+  // 警笛按钮
+  $$('[data-siren]').forEach(btn => {
+    btn.addEventListener('click', e => { e.preventDefault(); ensureCtx(); toggleSiren(btn.dataset.siren); });
+    btn.addEventListener('contextmenu', e => e.preventDefault());
+  });
+
+  // 警灯按钮（单选）
+  $$('[data-light]').forEach(btn => {
+    btn.addEventListener('click', e => {
+      e.preventDefault();
+      const mode = btn.dataset.light;
+      const next = (lightMode === mode) ? 'off' : mode;
+      setLight(next);
+      $$('[data-light]').forEach(b => b.classList.toggle('on', next !== 'off' && b.dataset.light === next));
+      if (mode === 'auto' && next !== 'off') setState('警灯随动');
+    });
+  });
+
+  // 开关类
+  $$('[data-toggle]').forEach(btn => {
+    btn.addEventListener('click', e => {
+      e.preventDefault();
+      ensureCtx();
+      const k = btn.dataset.toggle;
+      if (k === 'bass') {
+        const on = !bassNode;
+        toggleBass(on);
+        btn.classList.toggle('on', on);
+      } else if (k === 'lowpower') {
+        settings.lowPower = !settings.lowPower;
+        applyGain();
+        btn.classList.toggle('on', settings.lowPower);
+        setState(settings.lowPower ? '低功率 · -12dB' : '待命');
+      }
+    });
+  });
+
+  // 静音
+  $$('[data-action="mute"]').forEach(btn => {
+    btn.addEventListener('click', e => {
+      e.preventDefault();
+      stopAll(0.08);
+      toggleBass(false);
+      $$('[data-toggle="bass"]').forEach(b => b.classList.remove('on'));
+      setLight('off');
+      $$('[data-light]').forEach(b => b.classList.remove('on'));
+      endHold();
+      setState('已静音');
+      toast('已全部停止');
+    });
+  });
+
+  // 设置面板
+  const sheet = $('#sheet');
+  $$('[data-panel="settings"]').forEach(btn => {
+    btn.addEventListener('click', e => {
+      e.preventDefault();
+      document.querySelector('#toast').classList.remove('show');
+      sheet.classList.add('show');
+    });
+  });
+  $('#closeSheet').addEventListener('click', () => sheet.classList.remove('show'));
+  sheet.addEventListener('click', e => { if (e.target === sheet) sheet.classList.remove('show'); });
+
+  $('#vol').addEventListener('input', e => {
+    settings.volume = (+e.target.value) / 100;
+    $('#volV').textContent = e.target.value + '%';
+    applyGain();
+  });
+  $('#pitch').addEventListener('input', e => {
+    settings.pitch = +e.target.value;
+    $('#pitchV').textContent = e.target.value;
+    // 音调变化对正在播放的警笛生效：重启当前音色
+    if (activeSiren) { const cur = activeSiren; stopAll(0.08); buildSiren(cur); activeSiren = cur; refreshSirenButtons(); }
+  });
+
+  // 免责弹窗
+  $('#agree').addEventListener('click', () => {
+    $('#gate').classList.add('hide');
+    ensureCtx();
+    setState('待命');
+  });
+  $('#reject').addEventListener('click', () => {
+    $('#gateBox').innerHTML = '<p class="gate-out">已退出。<br>关闭此页面即可。</p>';
+    try { window.close(); } catch (e) {}
+  });
+
+  // 联系作者
+  $('#contact').addEventListener('click', () => toast('本页面为娱乐模拟，版权免费，欢迎自取'));
+
+  // 页面隐藏时停掉所有声音，避免后台空响
+  document.addEventListener('visibilitychange', () => {
+    if (document.hidden) { if (activeSiren) stopAll(0.1); setState('待命'); }
+  });
+
+  // 移动端保险：首次真实触摸即解锁音频上下文（iOS/Android 自动播放策略）
+  ['pointerdown', 'touchend', 'click'].forEach(ev =>
+    document.addEventListener(ev, function unlock() {
+      try { ensureCtx(); } catch (e) {}
+    }, { once: true, passive: true })
+  );
+
+  // 初始化灯条
+  paintLamps(null);
+  refreshSirenButtons();
+
+  // 自检钩子：供自动化测试断言音频图状态
+  window.__debug = () => ({
+    ctxState: ctx ? ctx.state : null,
+    voices: voices.length,
+    masterGain: masterNode ? +masterNode.gain.value.toFixed(3) : null,
+    activeSiren: activeSiren,
+    lightMode: lightMode,
+    litLamps: lampEls.filter(l => l.classList.contains('on')).length,
+    errors: window.__errors.length
+  });
+
+  window.__ready = true;
+})();
+</script>
+</body>
+</html>

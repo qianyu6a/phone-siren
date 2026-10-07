@@ -345,8 +345,8 @@
 
     filterNode = ctx.createBiquadFilter();
     filterNode.type = 'lowpass';
-    filterNode.frequency.value = 4200;
-    filterNode.Q.value = 0.6;
+    filterNode.frequency.value = 12000;  // 不压暗：实测参考视频的方波在 8kHz 仍有明显奇次谐波
+    filterNode.Q.value = 0.7;
 
     compNode = ctx.createDynamicsCompressor();
     compNode.threshold.value = -10;
@@ -404,17 +404,17 @@
     horn.type = 'peaking';
     horn.frequency.value = (o.formant == null ? Math.min(mid * 1.9, 1900) : o.formant) * P;
     horn.Q.value = o.formantQ == null ? 1.15 : o.formantQ;
-    horn.gain.value = o.formantGain == null ? 10 : o.formantGain;
+    horn.gain.value = o.formantGain == null ? 3 : o.formantGain;
 
     // 低通：模拟喇叭频响上限
     const lp = ctx.createBiquadFilter();
     lp.type = 'lowpass';
-    lp.frequency.value = (o.tone == null ? Math.min(mid * 3.2, 3400) : o.tone) * P;
+    lp.frequency.value = (o.tone == null ? Math.min(mid * 9, 12000) : o.tone) * P;
     lp.Q.value = 0.8;
 
     // 大功率喇叭的饱和质感（110-115dB 车外喇叭会明显失真）
     const sat = ctx.createWaveShaper();
-    sat.curve = makeSatCurve(o.sat == null ? 2.6 : o.sat);
+    sat.curve = makeSatCurve(o.sat == null ? 1.3 : o.sat);
     sat.oversample = '2x';
 
     const g = ctx.createGain();
@@ -503,8 +503,8 @@
   function buildSiren(name) {
     const P = pitchFactor();
     switch (name) {
-      case 'wail':        // 连续调频调（消防）：600↔1500Hz，周期 4s
-        makeVoice({ mid: 1050, sweep: 450, period: 4.0, level: 0.62 });
+      case 'wail':        // 连续调频调（消防）：实测自参考视频 —— 635↔1637Hz，周期 3.8s
+        makeVoice({ mid: 1136, sweep: 501, period: 3.8, level: 0.6 });
         break;
       case 'wail_slow':   // 连续调频 · 慢（消防长鸣）
         makeVoice({ mid: 1050, sweep: 450, period: 5.6, level: 0.62 });
